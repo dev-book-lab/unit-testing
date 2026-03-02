@@ -512,6 +512,6 @@ void 오전9시에_발송() {
 
 <div align="center">
 
-**[⬅️ 이전: Test-Driven Design](./05-test-driven-design.md)**
+**[⬅️ 이전: Test-Driven Design](./05-test-driven-design.md)** | **[홈으로 🏠](../README.md)**
 
 </div>
