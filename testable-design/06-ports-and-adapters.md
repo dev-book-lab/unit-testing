@@ -45,17 +45,17 @@ Alistair Cockburn이 정의한 이 패턴은 애플리케이션을 세 영역으
                            │ uses
   ┌────────────────────────▼────────────────────────────────┐
   │  Inbound Ports (Driving)                                │
-  │  OrderUseCase, UserUseCase (인터페이스)                  │
+  │  OrderUseCase, UserUseCase (인터페이스)                    │
   └────────────────────────┬────────────────────────────────┘
                            │ implements
   ┌────────────────────────▼────────────────────────────────┐
   │  Application Core                                       │
-  │  OrderService, UserService (비즈니스 로직)               │
+  │  OrderService, UserService (비즈니스 로직)                 │
   └────────────────────────┬────────────────────────────────┘
                            │ uses
   ┌────────────────────────▼────────────────────────────────┐
   │  Outbound Ports (Driven)                                │
-  │  OrderRepository, EventPublisher (인터페이스)            │
+  │  OrderRepository, EventPublisher (인터페이스)              │
   └────────────────────────┬────────────────────────────────┘
                            │ implements
   ┌────────────────────────▼────────────────────────────────┐
