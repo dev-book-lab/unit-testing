@@ -340,12 +340,58 @@ public interface InventoryService {
 **Q3.** ISP를 너무 극단적으로 적용해서 인터페이스마다 메서드가 1개씩인 코드가 됐다. 이것의 문제는 무엇인가? 적절한 균형을 어떻게 찾는가?
 
 > 💡 **해설**
->
-> **Q1.** 합쳐진 `MessageSender`: 이메일 발송만 필요한 `WelcomeService`를 테스트하려면 `sendSms()`와 `sendPush()`도 처리하는 Mock이나 Fake를 만들어야 한다. `mock(MessageSender.class)`에서 설정하지 않은 `sendSms()`가 내부적으로 호출돼도 감지되지 않는다. 분리된 경우: `WelcomeService(EmailSender emailSender)`는 `emailSender -> {}` 람다 하나로 Stub이 완성된다. `SmsSender`는 이 테스트와 완전히 무관하다. 테스트 코드가 훨씬 짧아지고 의도가 명확해진다.
->
-> **Q2.** 분리 방안: `InventoryChecker { boolean isAvailable(String itemId, int quantity); }` → 람다 Stub 가능: `(id, qty) -> true`. `InventoryReserver { void reserve(String itemId, int quantity); }` → 람다 Stub: `(id, qty) -> {}`. `InventoryReleaser { void release(String itemId, int quantity); }` → 람다 Stub: `(id, qty) -> {}`. `StockReader { int currentStock(String itemId); }` → 람다 Stub: `id -> 100`. OrderService가 예약만 필요하다면 `InventoryReserver`만 주입받으면 된다. 실제 `JpaInventoryService`는 4개 인터페이스를 모두 구현한다.
->
-> **Q3.** 극단적 ISP의 문제: ① 인터페이스 수가 폭발적으로 늘어나 패키지 구조가 복잡해진다. ② 한 서비스가 10개의 단일 메서드 인터페이스를 주입받으면 생성자 파라미터가 10개가 된다 — 이것도 설계 문제다. ③ 함께 변경되는 메서드들이 분리되면 인터페이스 변경 시 여러 곳을 수정해야 한다. 균형 찾기 기준: "이 메서드들을 함께 쓰는 클라이언트가 몇 개인가?" — 항상 같이 쓰이면 하나의 인터페이스. "이 메서드들이 독립적으로 테스트되는가?" — 독립적이면 분리. 실무에서는 읽기/쓰기 분리, 명령/조회 분리 정도가 자연스러운 균형점이 된다.
+
+**Q1.**
+
+합쳐진 `MessageSender`: 이메일 발송만 필요한 `WelcomeService`를 테스트하려면 `sendSms()`와 `sendPush()`도 처리하는 Mock이나 Fake를 만들어야 한다. `mock(MessageSender.class)`에서 설정하지 않은 `sendSms()`가 내부적으로 호출돼도 감지되지 않는다.
+
+분리된 경우: `WelcomeService(EmailSender emailSender)`는 람다 하나로 Stub이 완성된다.
+
+```java
+EmailSender stubSender = (to, subject, body) -> {};
+```
+
+`SmsSender`는 이 테스트와 완전히 무관하다. 테스트 코드가 훨씬 짧아지고 의도가 명확해진다.
+
+**Q2.**
+
+분리 방안과 각각의 람다 Stub:
+
+```java
+// InventoryChecker
+interface InventoryChecker { boolean isAvailable(String itemId, int quantity); }
+InventoryChecker stub = (id, qty) -> true;
+
+// InventoryReserver
+interface InventoryReserver { void reserve(String itemId, int quantity); }
+InventoryReserver stub = (id, qty) -> {};
+
+// InventoryReleaser
+interface InventoryReleaser { void release(String itemId, int quantity); }
+InventoryReleaser stub = (id, qty) -> {};
+
+// StockReader
+interface StockReader { int currentStock(String itemId); }
+StockReader stub = id -> 100;
+```
+
+`OrderService`가 예약만 필요하다면 `InventoryReserver`만 주입받으면 된다. 실제 `JpaInventoryService`는 4개 인터페이스를 모두 구현한다.
+
+**Q3.**
+
+극단적 ISP의 문제:
+
+① 인터페이스 수가 폭발적으로 늘어나 패키지 구조가 복잡해진다.
+
+② 한 서비스가 10개의 단일 메서드 인터페이스를 주입받으면 생성자 파라미터가 10개가 된다 — 이것도 설계 문제다.
+
+③ 함께 변경되는 메서드들이 분리되면 인터페이스 변경 시 여러 곳을 수정해야 한다.
+
+균형 찾기 기준:
+- "이 메서드들을 함께 쓰는 클라이언트가 몇 개인가?" — 항상 같이 쓰이면 하나의 인터페이스
+- "이 메서드들이 독립적으로 테스트되는가?" — 독립적이면 분리
+
+실무에서는 읽기/쓰기 분리, 명령/조회 분리 정도가 자연스러운 균형점이 된다.
 
 ---
 

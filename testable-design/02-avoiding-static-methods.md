@@ -60,10 +60,10 @@ static 메서드를 Mock하기 위해 PowerMock 또는 Mockito의 `MockedStatic`
 @Test
 void static_메서드_mock_예제() {
     try (MockedStatic<DiscountCalculator> mocked =
-             mockStatic(DiscountCalculator.class)) {
+            mockStatic(DiscountCalculator.class)) {
 
         mocked.when(() -> DiscountCalculator.calculate(vipUser))
-              .thenReturn(15);
+                .thenReturn(15);
 
         Order order = orderService.place(cart, vipUser);
 
@@ -334,12 +334,46 @@ public class AuditService {
 **Q3.** MockedStatic을 사용하는 기존 레거시 테스트가 100개 있다. 이것을 한 번에 제거하지 않고 점진적으로 개선하는 전략을 설명하라.
 
 > 💡 **해설**
->
-> **Q1.** `RequestContext.getClientIp()`: 외부 상태(HTTP 요청 컨텍스트)에 접근하는 static. `ClientIpProvider` 인터페이스를 만들고 주입받는다. 테스트: `ClientIpProvider stubIp = () -> "127.0.0.1"`. `LocalDateTime.now()`: 현재 시간에 접근하는 static. `Clock` 주입으로 해결. `HashUtils.sha256(email + ip)`: 순수 함수일 가능성이 높다. 입력이 같으면 항상 같은 해시를 반환한다면 static을 유지해도 된다. 단, 테스트에서 "어떤 해시가 생성됐는지" 예측하기 어렵다면 `Hasher` 인터페이스로 추상화하고 테스트에서는 `input -> "hashed-" + input` 같은 Stub을 쓴다.
->
-> **Q2.** `HashUtils.sha256(input)`: 외부 상태 없음, 항상 같은 입력에 같은 출력 → 순수 함수. static 유지 가능. 단, 테스트에서 "생성된 해시를 예측해야 한다면" 래퍼 인터페이스가 유용할 수 있다. `RequestContext.getClientIp()`: HTTP 요청 스레드 로컬 또는 서블릿 컨텍스트에서 값을 읽는다 → 외부 상태 접근. 순수 함수가 아님. static으로 두면 테스트 환경에서 null이나 예외가 발생한다.
->
-> **Q3.** 단계적 전략: ① 새로 작성하는 코드에는 static 의존성을 두지 않는다 (확산 방지). ② MockedStatic을 쓰는 테스트 중 자주 실패하거나(Flaky) 변경 빈도가 높은 것부터 우선 리팩터링한다. ③ 리팩터링 순서: static 메서드를 쓰는 클래스에 인터페이스 도입 → 래퍼 구현 추가 → 주입받도록 변경 → MockedStatic 제거. ④ 한 클래스씩 처리하고, 처리 전후를 PR 단위로 분리한다. 한 번에 하지 않는 것이 핵심이다.
+
+**Q1.**
+
+`RequestContext.getClientIp()`: 외부 상태(HTTP 요청 컨텍스트)에 접근하는 static. `ClientIpProvider` 인터페이스를 만들고 주입받는다.
+
+```java
+ClientIpProvider stubIp = () -> "127.0.0.1";
+```
+
+`LocalDateTime.now()`: 현재 시간에 접근하는 static. `Clock` 주입으로 해결.
+
+`HashUtils.sha256(email + ip)`: 순수 함수일 가능성이 높다. 입력이 같으면 항상 같은 해시를 반환한다면 static을 유지해도 된다. 단, 테스트에서 "어떤 해시가 생성됐는지" 예측하기 어렵다면 `Hasher` 인터페이스로 추상화하고 Stub을 쓴다.
+
+```java
+Hasher stubHasher = input -> "hashed-" + input;
+```
+
+**Q2.**
+
+`HashUtils.sha256(input)`: 외부 상태 없음, 항상 같은 입력에 같은 출력 → 순수 함수. static 유지 가능. 단, 테스트에서 "생성된 해시를 예측해야 한다면" 래퍼 인터페이스가 유용할 수 있다.
+
+`RequestContext.getClientIp()`: HTTP 요청 스레드 로컬 또는 서블릿 컨텍스트에서 값을 읽는다 → 외부 상태 접근. 순수 함수가 아님. static으로 두면 테스트 환경에서 null이나 예외가 발생한다.
+
+**Q3.**
+
+단계적 전략:
+
+① 새로 작성하는 코드에는 static 의존성을 두지 않는다 (확산 방지).
+
+② MockedStatic을 쓰는 테스트 중 자주 실패하거나(Flaky) 변경 빈도가 높은 것부터 우선 리팩터링한다.
+
+③ 리팩터링 순서:
+```
+static 메서드를 쓰는 클래스에 인터페이스 도입
+→ 래퍼 구현 추가
+→ 주입받도록 변경
+→ MockedStatic 제거
+```
+
+④ 한 클래스씩 처리하고, 처리 전후를 PR 단위로 분리한다. 한 번에 하지 않는 것이 핵심이다.
 
 ---
 

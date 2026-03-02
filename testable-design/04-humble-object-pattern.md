@@ -48,7 +48,7 @@ public class OrderController {
 
         // ❌ 비즈니스 로직이 컨트롤러에 있다
         User user = userRepository.findById(request.userId())
-            .orElseThrow(() -> new UserNotFoundException(request.userId()));
+                .orElseThrow(() -> new UserNotFoundException(request.userId()));
 
         if (user.grade() == Grade.VIP) {
             // VIP 할인 로직
@@ -58,7 +58,7 @@ public class OrderController {
 
         if (request.totalPrice() < 1_000) {
             return ResponseEntity.badRequest()
-                .body(OrderResponse.error("최소 주문 금액은 1,000원입니다"));
+                    .body(OrderResponse.error("최소 주문 금액은 1,000원입니다"));
         }
 
         Order order = Order.from(request, user);
@@ -97,7 +97,7 @@ public class OrderService {
 
     public OrderResult place(Long userId, int totalPrice) {
         User user = userFinder.findById(userId)
-            .orElseThrow(() -> new UserNotFoundException(userId));
+                .orElseThrow(() -> new UserNotFoundException(userId));
 
         if (totalPrice < 1_000) {
             throw new MinimumAmountException("최소 주문 금액은 1,000원입니다");
@@ -127,8 +127,8 @@ public class OrderController {
         try {
             // 변환 → 위임 → 변환
             OrderResult result = orderService.place(
-                request.userId(),
-                request.totalPrice()
+                    request.userId(),
+                    request.totalPrice()
             );
             return ResponseEntity.ok(OrderResponse.of(result.order()));
 
@@ -136,7 +136,7 @@ public class OrderController {
             return ResponseEntity.notFound().build();
         } catch (MinimumAmountException e) {
             return ResponseEntity.badRequest()
-                .body(OrderResponse.error(e.getMessage()));
+                    .body(OrderResponse.error(e.getMessage()));
         }
     }
 }
@@ -164,7 +164,7 @@ class OrderServiceTest {
     @Test
     void 최소_금액_미만_주문은_예외가_발생한다() {
         assertThatThrownBy(() -> service.place(1L, 999))
-            .isInstanceOf(MinimumAmountException.class);
+                .isInstanceOf(MinimumAmountException.class);
     }
 }
 
@@ -177,12 +177,12 @@ class OrderControllerTest {
     @Test
     void 주문_성공_시_200을_반환한다() throws Exception {
         when(orderService.place(anyLong(), anyInt()))
-            .thenReturn(OrderResult.success(sampleOrder));
+                .thenReturn(OrderResult.success(sampleOrder));
 
         mockMvc.perform(post("/orders")
-                .contentType(APPLICATION_JSON)
-                .content("{\"userId\": 1, \"totalPrice\": 20000}"))
-            .andExpect(status().isOk());
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"userId\": 1, \"totalPrice\": 20000}"))
+                .andExpect(status().isOk());
     }
 }
 ```
@@ -200,18 +200,18 @@ class OrderControllerTest {
 @Bean
 public Step inactiveUserCleanupStep() {
     return stepBuilderFactory.get("inactiveUserCleanupStep")
-        .<User, User>chunk(100)
-        .reader(userItemReader())
-        .processor(user -> {
-            // 비즈니스 로직이 람다 안에 숨어있다
-            if (user.lastLoginAt().isBefore(LocalDate.now().minusMonths(6))) {
-                user.deactivate();
-                return user;
-            }
-            return null;
-        })
-        .writer(userItemWriter())
-        .build();
+            .<User, User>chunk(100)
+            .reader(userItemReader())
+            .processor(user -> {
+                // 비즈니스 로직이 람다 안에 숨어있다
+                if (user.lastLoginAt().isBefore(LocalDate.now().minusMonths(6))) {
+                    user.deactivate();
+                    return user;
+                }
+                return null;
+            })
+            .writer(userItemWriter())
+            .build();
 }
 
 // ✅ 로직을 ItemProcessor로 추출하고, 그 안의 정책을 또 추출
@@ -348,9 +348,9 @@ public ResponseEntity<PointSummary> getPoints(@PathVariable Long id) {
 
     int total = histories.stream().mapToInt(PointHistory::amount).sum();
     int expiringSoon = histories.stream()
-        .filter(h -> h.expiresAt().isBefore(LocalDate.now().plusDays(30)))
-        .mapToInt(PointHistory::amount)
-        .sum();
+            .filter(h -> h.expiresAt().isBefore(LocalDate.now().plusDays(30)))
+            .mapToInt(PointHistory::amount)
+            .sum();
 
     return ResponseEntity.ok(new PointSummary(total, expiringSoon));
 }
@@ -378,12 +378,80 @@ public class PointExpiryScheduler {
 ```
 
 > 💡 **해설**
->
-> **Q1.** 추출 기준: `PointSummary` 계산 로직(`total`, `expiringSoon` 계산)이 비즈니스 로직이다. 현재 날짜 의존성(`LocalDate.now()`)도 문제다. 추출: `public class PointSummaryService { private final UserFinder userFinder; private final PointHistoryReader historyReader; private final Clock clock; public PointSummary summarize(Long userId) { userFinder.findById(userId).orElseThrow(UserNotFoundException::new); List<PointHistory> histories = historyReader.findByUserId(userId); int total = histories.stream().mapToInt(PointHistory::amount).sum(); LocalDate threshold = LocalDate.now(clock).plusDays(30); int expiringSoon = histories.stream().filter(h -> h.expiresAt().isBefore(threshold)).mapToInt(PointHistory::amount).sum(); return new PointSummary(total, expiringSoon); } }`. 서비스 테스트: Clock.fixed()로 "30일 내 만료" 경계값 테스트 포함.
->
-> **Q2.** `@EmbeddedKafka`: 실제 Kafka 프로토콜 검증, 직렬화/역직렬화, offset 관리 등 인프라 동작 검증. 단점: 수 초~수십 초, 설정 복잡. Humble Object 단위 테스트: `handler.handle(event)` 직접 호출 — ms 단위, Kafka 없이 비즈니스 로직만 빠르게 검증. 단점: Kafka 메시지 형식, 역직렬화 오류를 잡지 못함. 함께 쓰는 전략: 핸들러 로직은 단위 테스트, Kafka 컨슈머 설정은 최소한의 `@EmbeddedKafka` 통합 테스트로 검증.
->
-> **Q3.** 분리: `@Component public class PointExpiryScheduler { private final PointExpiryJob job; @Scheduled(cron = "0 0 0 * * *") public void expirePoints() { job.execute(); } }`. `public class PointExpiryJob { private final PointRepository pointRepository; private final EventPublisher eventPublisher; private final Clock clock; public void execute() { LocalDate today = LocalDate.now(clock); List<Point> expired = pointRepository.findByExpiresAtBefore(today); expired.forEach(p -> { p.expire(); pointRepository.save(p); eventPublisher.publish(new PointExpired(p.userId(), p.amount())); }); } }`. `PointExpiryJob`은 Clock 주입으로 경계값 테스트 가능. `PointExpiryScheduler`는 `job.execute()`만 호출하므로 테스트가 거의 필요 없다.
+
+**Q1.**
+
+추출 기준: `PointSummary` 계산 로직(`total`, `expiringSoon` 계산)이 비즈니스 로직이다. `LocalDate.now()` 현재 날짜 의존성도 문제다.
+
+추출 후 서비스:
+
+```java
+public class PointSummaryService {
+    private final UserFinder userFinder;
+    private final PointHistoryReader historyReader;
+    private final Clock clock;
+
+    public PointSummary summarize(Long userId) {
+        userFinder.findById(userId).orElseThrow(UserNotFoundException::new);
+        List<PointHistory> histories = historyReader.findByUserId(userId);
+
+        int total = histories.stream().mapToInt(PointHistory::amount).sum();
+        LocalDate threshold = LocalDate.now(clock).plusDays(30);
+        int expiringSoon = histories.stream()
+            .filter(h -> h.expiresAt().isBefore(threshold))
+            .mapToInt(PointHistory::amount)
+            .sum();
+
+        return new PointSummary(total, expiringSoon);
+    }
+}
+```
+
+서비스 테스트: `Clock.fixed()`로 "30일 내 만료" 경계값 테스트 포함.
+
+**Q2.**
+
+`@EmbeddedKafka`: 실제 Kafka 프로토콜 검증, 직렬화/역직렬화, offset 관리 등 인프라 동작 검증. 단점: 수 초~수십 초, 설정 복잡.
+
+Humble Object 단위 테스트: `handler.handle(event)` 직접 호출 — ms 단위, Kafka 없이 비즈니스 로직만 빠르게 검증. 단점: Kafka 메시지 형식, 역직렬화 오류를 잡지 못함.
+
+함께 쓰는 전략: 핸들러 로직은 단위 테스트, Kafka 컨슈머 설정은 최소한의 `@EmbeddedKafka` 통합 테스트로 검증.
+
+**Q3.**
+
+분리 결과:
+
+```java
+@Component
+public class PointExpiryScheduler {
+    private final PointExpiryJob job;
+
+    @Scheduled(cron = "0 0 0 * * *")
+    public void expirePoints() {
+        job.execute();
+    }
+}
+```
+
+```java
+public class PointExpiryJob {
+    private final PointRepository pointRepository;
+    private final EventPublisher eventPublisher;
+    private final Clock clock;
+
+    public void execute() {
+        LocalDate today = LocalDate.now(clock);
+        List<Point> expired = pointRepository.findByExpiresAtBefore(today);
+        expired.forEach(p -> {
+            p.expire();
+            pointRepository.save(p);
+            eventPublisher.publish(new PointExpired(p.userId(), p.amount()));
+        });
+    }
+}
+```
+
+`PointExpiryJob`은 `Clock` 주입으로 경계값 테스트 가능. `PointExpiryScheduler`는 `job.execute()`만 호출하므로 테스트가 거의 필요 없다.
 
 ---
 

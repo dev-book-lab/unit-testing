@@ -107,7 +107,7 @@ public class Order {
     public Order complete(Clock clock) {
         // 새 객체 반환 — 기존 객체 불변
         return new Order(this.id, this.userId, this.totalPrice,
-            COMPLETED, LocalDateTime.now(clock));
+                COMPLETED, LocalDateTime.now(clock));
     }
 }
 
@@ -140,8 +140,8 @@ void 주문_완료_시_상태가_COMPLETED로_변경된다() {
 public void processMonthlyPoints(Long userId) {
     List<Order> orders = orderRepository.findByUserId(userId);  // I/O
     int totalPoints = orders.stream()
-        .mapToInt(o -> o.totalPrice() / 100)                   // 계산
-        .sum();
+            .mapToInt(o -> o.totalPrice() / 100)                   // 계산
+            .sum();
     if (totalPoints > 1000) totalPoints += 200;                 // 보너스 계산
 
     Point point = new Point(userId, totalPoints);
@@ -154,8 +154,8 @@ public void processMonthlyPoints(Long userId) {
 // ✅ 계산 로직 추출 — 순수 함수
 public static int calculateMonthlyPoints(List<Order> orders) {
     int base = orders.stream()
-        .mapToInt(o -> o.totalPrice() / 100)
-        .sum();
+            .mapToInt(o -> o.totalPrice() / 100)
+            .sum();
     return base > 1000 ? base + 200 : base; // 보너스 포함
 }
 
@@ -218,15 +218,15 @@ void 10퍼센트_할인_적용() {
 
 ```
   ┌─────────────────────────────────────────┐
-  │   Imperative Shell (명령형 쉘)            │
+  │   Imperative Shell (명령형 쉘)           │
   │   Service, Repository, Controller       │
-  │   I/O, 부수효과, 상태 변경                  │
+  │   I/O, 부수효과, 상태 변경               │
   └────────────────┬────────────────────────┘
                    │ 순수 함수 호출
   ┌────────────────▼────────────────────────┐
-  │   Functional Core (함수형 코어)            │
+  │   Functional Core (함수형 코어)          │
   │   Domain Object, Policy, Calculator     │
-  │   순수 함수, 불변, 부수효과 없음               │
+  │   순수 함수, 불변, 부수효과 없음          │
   └─────────────────────────────────────────┘
 ```
 
@@ -355,12 +355,57 @@ public class ShippingService {
 **Q3.** `OrderDecider.decide()` 같은 순수 함수를 static으로 만드는 것과 인스턴스 메서드로 만드는 것의 차이는 무엇인가? 언제 인스턴스 메서드가 필요한가?
 
 > 💡 **해설**
->
-> **Q1.** 순수하지 않은 부분: `productRepository.findWeightByIds()` (I/O), `LocalDate.now()` (현재 시간). 순수한 부분: `isFreeShipping` 계산, `fee` 계산. 분리: `public static ShippingFee calculate(int baseWeight, Grade userGrade, int totalPrice, DayOfWeek dayOfWeek)` — 모든 입력을 파라미터로 받는 순수 함수. 서비스에서 I/O 후 순수 함수 호출: `int weight = productRepository.findWeightByIds(order.itemIds()); DayOfWeek day = LocalDate.now(clock).getDayOfWeek(); return ShippingFee.calculate(weight, user.grade(), order.totalPrice(), day);`. 순수 함수는 `(5_000, NORMAL, 30_000, SATURDAY)` 같은 인자로 바로 테스트 가능.
->
-> **Q2.** JPA Entity가 완전한 불변이기는 어렵다. JPA는 기본적으로 가변 객체를 기대하고, 변경 감지(Dirty Checking)는 객체의 상태가 변경됨을 전제로 한다. 현실적인 접근: ① Rich Domain Model — Entity 내부에 비즈니스 메서드를 두되, 그 메서드가 순수 계산 로직을 별도 메서드로 위임한다. `order.completeWith(clock)` 내부에서 계산은 순수 함수가 하고, Entity의 상태 변경은 메서드 안에서 한다. ② 도메인 객체와 JPA Entity 분리 — 비즈니스 로직을 가진 순수 도메인 객체와 DB 매핑을 위한 JPA Entity를 별도로 둔다(복잡하지만 순수성 최대화). 실무에서는 ①이 더 현실적이며, 계산 로직만이라도 순수 함수로 추출하는 것으로 충분한 이점을 얻을 수 있다.
->
-> **Q3.** static 순수 함수: 정책이 고정되어 있을 때 적합. `applyDiscount(price, rate)`처럼 알고리즘 자체가 변하지 않는다. 테스트에서 클래스 이름으로 직접 호출. 인스턴스 메서드 (인터페이스): 정책이 교체될 수 있을 때 필요. `DiscountPolicy.calculate(user)` — VIP 10%, GOLD 5%, 시즌별 다른 정책 등 구현이 바뀔 수 있다. 인스턴스로 주입받아서 테스트에서 다른 구현으로 교체 가능. 기준: "이 계산 방식이 변할 수 있는가?" → 변한다면 인스턴스 + 인터페이스, 변하지 않는다면 static.
+
+**Q1.**
+
+순수하지 않은 부분: `productRepository.findWeightByIds()` (I/O), `LocalDate.now()` (현재 시간).
+
+순수한 부분: `isFreeShipping` 계산, `fee` 계산.
+
+분리 — 모든 입력을 파라미터로 받는 순수 함수:
+
+```java
+public static ShippingFee calculate(
+        int baseWeight, Grade userGrade, int totalPrice, DayOfWeek dayOfWeek) {
+
+    boolean isFreeShipping = userGrade == Grade.VIP || totalPrice >= 50_000;
+    if (isFreeShipping) return ShippingFee.FREE;
+
+    int fee = baseWeight <= 5_000 ? 3_000 : 5_000;
+    if (dayOfWeek == DayOfWeek.SATURDAY) fee += 1_000;
+    return new ShippingFee(fee);
+}
+```
+
+서비스에서 I/O 후 순수 함수 호출:
+
+```java
+int weight = productRepository.findWeightByIds(order.itemIds());
+DayOfWeek day = LocalDate.now(clock).getDayOfWeek();
+return ShippingFee.calculate(weight, user.grade(), order.totalPrice(), day);
+```
+
+순수 함수는 `(5_000, NORMAL, 30_000, SATURDAY)` 같은 인자로 바로 테스트 가능.
+
+**Q2.**
+
+JPA Entity가 완전한 불변이기는 어렵다. JPA는 기본적으로 가변 객체를 기대하고, 변경 감지(Dirty Checking)는 객체의 상태가 변경됨을 전제로 한다.
+
+현실적인 접근:
+
+① **Rich Domain Model** — Entity 내부에 비즈니스 메서드를 두되, 그 메서드가 순수 계산 로직을 별도 메서드로 위임한다. `order.completeWith(clock)` 내부에서 계산은 순수 함수가 하고, Entity의 상태 변경은 메서드 안에서 한다.
+
+② **도메인 객체와 JPA Entity 분리** — 비즈니스 로직을 가진 순수 도메인 객체와 DB 매핑을 위한 JPA Entity를 별도로 둔다(복잡하지만 순수성 최대화).
+
+실무에서는 ①이 더 현실적이며, 계산 로직만이라도 순수 함수로 추출하는 것으로 충분한 이점을 얻을 수 있다.
+
+**Q3.**
+
+**static 순수 함수**: 정책이 고정되어 있을 때 적합. `applyDiscount(price, rate)`처럼 알고리즘 자체가 변하지 않는다. 테스트에서 클래스 이름으로 직접 호출.
+
+**인스턴스 메서드(인터페이스)**: 정책이 교체될 수 있을 때 필요. `DiscountPolicy.calculate(user)` — VIP 10%, GOLD 5%, 시즌별 다른 정책 등 구현이 바뀔 수 있다. 인스턴스로 주입받아서 테스트에서 다른 구현으로 교체 가능.
+
+기준: "이 계산 방식이 변할 수 있는가?" → 변한다면 인스턴스 + 인터페이스, 변하지 않는다면 static.
 
 ---
 

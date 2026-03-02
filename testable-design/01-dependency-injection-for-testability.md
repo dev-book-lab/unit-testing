@@ -100,9 +100,9 @@ public class OrderService {
 
     // Spring이 생성자를 호출해서 주입
     public OrderService(InventoryClient inventoryClient,
-                        OrderRepository orderRepository,
-                        EventPublisher eventPublisher,
-                        DiscountPolicy discountPolicy) {
+            OrderRepository orderRepository,
+            EventPublisher eventPublisher,
+            DiscountPolicy discountPolicy) {
         this.inventoryClient = inventoryClient;
         this.orderRepository = orderRepository;
         this.eventPublisher = eventPublisher;
@@ -124,7 +124,7 @@ class OrderServiceTest {
     private final DiscountPolicy vipPolicy = user -> 10;
 
     private final OrderService service =
-        new OrderService(inventoryStub, fakeRepo, mockPublisher, vipPolicy);
+            new OrderService(inventoryStub, fakeRepo, mockPublisher, vipPolicy);
 
     @Test
     void VIP_회원_주문_시_10퍼센트_할인이_적용된다() {
@@ -188,12 +188,12 @@ public class CouponValidator {
 @Test
 void 만료일이_지난_쿠폰은_유효하지_않다() {
     Clock fixedClock = Clock.fixed(
-        Instant.parse("2024-06-01T00:00:00Z"), ZoneOffset.UTC);
+            Instant.parse("2024-06-01T00:00:00Z"), ZoneOffset.UTC);
     CouponValidator validator = new CouponValidator(fixedClock);
 
     Coupon expiredCoupon = aCoupon()
-        .withExpiresAt(LocalDate.of(2024, 5, 31))
-        .build();
+            .withExpiresAt(LocalDate.of(2024, 5, 31))
+            .build();
 
     assertThat(validator.isExpired(expiredCoupon)).isTrue();
 }
@@ -220,13 +220,13 @@ public class OrderService {
 ```java
 // 생성자 파라미터가 7개라면?
 public OrderService(
-    InventoryClient inventoryClient,
-    OrderRepository orderRepository,
-    EventPublisher eventPublisher,
-    DiscountPolicy discountPolicy,
-    ShippingCalculator shippingCalculator,
-    CouponValidator couponValidator,
-    AuditLogger auditLogger   // 7번째
+        InventoryClient inventoryClient,
+        OrderRepository orderRepository,
+        EventPublisher eventPublisher,
+        DiscountPolicy discountPolicy,
+        ShippingCalculator shippingCalculator,
+        CouponValidator couponValidator,
+        AuditLogger auditLogger   // 7번째
 ) { ... }
 ```
 
@@ -318,12 +318,64 @@ public class ReportService {
 **Q3.** 생성자가 7개의 파라미터를 받는 `UserService`가 있다. 이 신호를 어떻게 해석하고, 어떻게 리팩터링하겠는가?
 
 > 💡 **해설**
->
-> **Q1.** 문제: ① `new JdbcReportRepository()` — 실제 DB 연결을 시도한다. 테스트에서 교체할 방법이 없다. ② `ReportFormatter.format(sales)` — static 메서드라 교체 불가 (다음 문서 주제). 리팩터링: `public class ReportService { private final ReportRepository repository; private final ReportFormatter formatter; public ReportService(ReportRepository repository, ReportFormatter formatter) { ... } public String generateMonthlyReport(int year, int month) { return formatter.format(repository.findByYearMonth(year, month)); } }`. 테스트: `ReportRepository fakeRepo = (y, m) -> List.of(new Sale(...)); ReportFormatter formatter = new ReportFormatter(); ReportService service = new ReportService(fakeRepo, formatter); assertThat(service.generateMonthlyReport(2024, 6)).contains("2024년 6월");`
->
-> **Q2.** `@SpringBootTest`: Spring 전체 컨텍스트를 로딩하므로 수십 초 걸린다. 실제 빈 연결, 설정, DB 연결까지 검증된다. 통합 오류를 발견하기 좋지만 빠른 피드백이 필요한 비즈니스 로직 테스트에는 과도하다. 생성자 주입 단위 테스트: ms 단위, Spring 없음, 비즈니스 로직에 집중. 선택 기준: 비즈니스 규칙 검증 → 단위 테스트. Spring 빈 연결, 설정, DB 연결 검증 → `@SpringBootTest` 또는 슬라이스 테스트(`@WebMvcTest`, `@DataJpaTest`). 대부분의 테스트는 단위 테스트이고, 통합 테스트는 소수.
->
-> **Q3.** 해석: 7개 파라미터는 `UserService`가 7가지 책임을 가진다는 신호다. 단일 책임 원칙(SRP) 위반 가능성이 높다. 리팩터링 방향: 책임을 묶어서 별도 서비스로 분리한다. 예: `UserRegistrationService(UserRepository, PasswordEncoder, EmailSender)` + `UserAuthService(UserRepository, TokenGenerator, SessionStore)` + `UserProfileService(UserRepository, ProfileRepository, ImageStorage)`. 분리 기준: 함께 변경되는 것끼리 묶는다. 7개 의존성 중 어떤 것들이 동시에 쓰이는지 확인하면 그룹이 보인다.
+
+**Q1.**
+
+문제 두 가지: ① `new JdbcReportRepository()` — 실제 DB 연결을 시도한다. 테스트에서 교체할 방법이 없다. ② `ReportFormatter.format(sales)` — static 메서드라 교체 불가 (다음 문서 주제).
+
+리팩터링:
+
+```java
+public class ReportService {
+    private final ReportRepository repository;
+    private final ReportFormatter formatter;
+
+    public ReportService(ReportRepository repository, ReportFormatter formatter) {
+        this.repository = repository;
+        this.formatter = formatter;
+    }
+
+    public String generateMonthlyReport(int year, int month) {
+        return formatter.format(repository.findByYearMonth(year, month));
+    }
+}
+```
+
+테스트:
+
+```java
+ReportRepository fakeRepo = (y, m) -> List.of(new Sale(...));
+ReportFormatter formatter = new ReportFormatter();
+ReportService service = new ReportService(fakeRepo, formatter);
+
+assertThat(service.generateMonthlyReport(2024, 6)).contains("2024년 6월");
+```
+
+**Q2.**
+
+`@SpringBootTest`: Spring 전체 컨텍스트를 로딩하므로 수십 초 걸린다. 실제 빈 연결, 설정, DB 연결까지 검증된다. 통합 오류를 발견하기 좋지만 빠른 피드백이 필요한 비즈니스 로직 테스트에는 과도하다.
+
+생성자 주입 단위 테스트: ms 단위, Spring 없음, 비즈니스 로직에 집중.
+
+선택 기준:
+- 비즈니스 규칙 검증 → 단위 테스트
+- Spring 빈 연결, 설정, DB 연결 검증 → `@SpringBootTest` 또는 슬라이스 테스트(`@WebMvcTest`, `@DataJpaTest`)
+
+대부분의 테스트는 단위 테스트이고, 통합 테스트는 소수.
+
+**Q3.**
+
+7개 파라미터는 `UserService`가 7가지 책임을 가진다는 신호다. 단일 책임 원칙(SRP) 위반 가능성이 높다.
+
+리팩터링 방향 — 책임을 묶어서 별도 서비스로 분리한다:
+
+```
+UserRegistrationService(UserRepository, PasswordEncoder, EmailSender)
+UserAuthService(UserRepository, TokenGenerator, SessionStore)
+UserProfileService(UserRepository, ProfileRepository, ImageStorage)
+```
+
+분리 기준: 함께 변경되는 것끼리 묶는다. 7개 의존성 중 어떤 것들이 동시에 쓰이는지 확인하면 그룹이 보인다.
 
 ---
 

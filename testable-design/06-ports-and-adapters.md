@@ -45,17 +45,17 @@ Alistair Cockburn이 정의한 이 패턴은 애플리케이션을 세 영역으
                            │ uses
   ┌────────────────────────▼────────────────────────────────┐
   │  Inbound Ports (Driving)                                │
-  │  OrderUseCase, UserUseCase (인터페이스)                    │
+  │  OrderUseCase, UserUseCase (인터페이스)                  │
   └────────────────────────┬────────────────────────────────┘
                            │ implements
   ┌────────────────────────▼────────────────────────────────┐
   │  Application Core                                       │
-  │  OrderService, UserService (비즈니스 로직)                 │
+  │  OrderService, UserService (비즈니스 로직)               │
   └────────────────────────┬────────────────────────────────┘
                            │ uses
   ┌────────────────────────▼────────────────────────────────┐
   │  Outbound Ports (Driven)                                │
-  │  OrderRepository, EventPublisher (인터페이스)              │
+  │  OrderRepository, EventPublisher (인터페이스)            │
   └────────────────────────┬────────────────────────────────┘
                            │ implements
   ┌────────────────────────▼────────────────────────────────┐
@@ -397,12 +397,99 @@ public class NotificationService {
 **Q3.** 같은 비즈니스 로직을 HTTP API와 Kafka 이벤트 두 가지 인바운드로 처리해야 한다. Ports and Adapters에서 코드 중복 없이 어떻게 구현하는가?
 
 > 💡 **해설**
->
-> **Q1.** 분리 결과. Inbound Port: `interface NotifyOrderPlacedUseCase { void notify(Long orderId, Long userId); }`. Outbound Ports: `interface UserFinder { Optional<User> findById(Long id); }` / `interface EmailNotifier { void sendEmail(String to, String body); }` / `interface SmsNotifier { void sendSms(String phone, String message); }`. Application Core: `class NotificationService implements NotifyOrderPlacedUseCase { private final UserFinder userFinder; private final EmailNotifier emailNotifier; private final SmsNotifier smsNotifier; public void notify(Long orderId, Long userId) { User user = userFinder.findById(userId).orElseThrow(); emailNotifier.sendEmail(user.email(), "주문 " + orderId + "이 접수됐습니다."); smsNotifier.sendSms(user.phone(), "주문이 접수됐습니다."); } }`. Driven Adapters: `JpaUserRepository implements UserFinder` / `JavaMailEmailNotifier implements EmailNotifier` / `SmsApiClientAdapter implements SmsNotifier`. Core는 Spring, JavaMailSender, SmsApiClient를 모름. 단위 테스트에서 `UserFinder`, `EmailNotifier`, `SmsNotifier`를 람다 Stub으로 즉시 교체 가능.
->
-> **Q2.** 충돌이 발생한다. `@Transactional`은 Spring AOP 의존이고, Core가 Spring을 알게 된다. 해결 방법: ① Facade 패턴 — `@Transactional`을 가진 별도 Application Service가 Core UseCase를 감싼다. `@Service @Transactional class TransactionalOrderFacade { private final PlaceOrderUseCase useCase; public Order place(PlaceOrderCommand command) { return useCase.place(command); } }`. Core는 `@Transactional` 없이 순수하게 유지. ② 현실적 타협 — Core에 `@Transactional`을 허용하되, 이것이 아키텍처 원칙의 예외임을 팀에서 인식한다. 많은 프로젝트에서 ②를 선택하는데, 완벽한 순수성보다 실용성이 중요할 때 합리적인 선택이다.
->
-> **Q3.** Inbound Port 하나, Adapter 두 개로 구현한다. `interface PlaceOrderUseCase { Order place(PlaceOrderCommand command); }`. HTTP Adapter: `@PostMapping("/orders") public ResponseEntity<?> placeViaHttp(@RequestBody PlaceOrderRequest req) { Order order = placeOrderUseCase.place(req.toCommand()); return ResponseEntity.ok(OrderResponse.from(order)); }`. Kafka Adapter: `@KafkaListener(topics = "payment-completed") public void placeViaKafka(PaymentCompletedEvent event) { placeOrderUseCase.place(event.toCommand()); }`. 비즈니스 로직(`OrderService.place()`)은 한 곳에만 있다. HTTP와 Kafka는 각자의 변환(`toCommand()`)만 담당한다. 인바운드 수단이 추가돼도 Core 코드는 변경 없다.
+
+**Q1.**
+
+분리 결과:
+
+**Inbound Port**
+```java
+interface NotifyOrderPlacedUseCase {
+    void notify(Long orderId, Long userId);
+}
+```
+
+**Outbound Ports**
+```java
+interface UserFinder       { Optional<User> findById(Long id); }
+interface EmailNotifier    { void sendEmail(String to, String body); }
+interface SmsNotifier      { void sendSms(String phone, String message); }
+```
+
+**Application Core**
+```java
+class NotificationService implements NotifyOrderPlacedUseCase {
+    private final UserFinder userFinder;
+    private final EmailNotifier emailNotifier;
+    private final SmsNotifier smsNotifier;
+
+    public void notify(Long orderId, Long userId) {
+        User user = userFinder.findById(userId).orElseThrow();
+        emailNotifier.sendEmail(user.email(), "주문 " + orderId + "이 접수됐습니다.");
+        smsNotifier.sendSms(user.phone(), "주문이 접수됐습니다.");
+    }
+}
+```
+
+**Driven Adapters**
+```
+JpaUserRepository       implements UserFinder
+JavaMailEmailNotifier   implements EmailNotifier
+SmsApiClientAdapter     implements SmsNotifier
+```
+
+Core는 Spring, `JavaMailSender`, `SmsApiClient`를 모른다. 단위 테스트에서 `UserFinder`, `EmailNotifier`, `SmsNotifier`를 람다 Stub으로 즉시 교체 가능.
+
+**Q2.**
+
+충돌이 발생한다. `@Transactional`은 Spring AOP 의존이고, Core가 Spring을 알게 된다.
+
+해결 방법:
+
+① **Facade 패턴** — `@Transactional`을 가진 별도 Application Service가 Core UseCase를 감싼다.
+
+```java
+@Service
+@Transactional
+class TransactionalOrderFacade {
+    private final PlaceOrderUseCase useCase;
+
+    public Order place(PlaceOrderCommand command) {
+        return useCase.place(command);
+    }
+}
+```
+
+Core는 `@Transactional` 없이 순수하게 유지.
+
+② **현실적 타협** — Core에 `@Transactional`을 허용하되, 이것이 아키텍처 원칙의 예외임을 팀에서 인식한다. 많은 프로젝트에서 ②를 선택하는데, 완벽한 순수성보다 실용성이 중요할 때 합리적인 선택이다.
+
+**Q3.**
+
+Inbound Port 하나, Adapter 두 개로 구현한다.
+
+```java
+interface PlaceOrderUseCase {
+    Order place(PlaceOrderCommand command);
+}
+```
+
+```java
+// HTTP Adapter
+@PostMapping("/orders")
+public ResponseEntity<?> placeViaHttp(@RequestBody PlaceOrderRequest req) {
+    Order order = placeOrderUseCase.place(req.toCommand());
+    return ResponseEntity.ok(OrderResponse.from(order));
+}
+
+// Kafka Adapter
+@KafkaListener(topics = "payment-completed")
+public void placeViaKafka(PaymentCompletedEvent event) {
+    placeOrderUseCase.place(event.toCommand());
+}
+```
+
+비즈니스 로직(`OrderService.place()`)은 한 곳에만 있다. HTTP와 Kafka는 각자의 변환(`toCommand()`)만 담당한다. 인바운드 수단이 추가돼도 Core 코드는 변경 없다.
 
 ---
 
