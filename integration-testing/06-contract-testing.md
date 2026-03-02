@@ -398,6 +398,6 @@ class InventoryServicePactVerificationTest {
 
 <div align="center">
 
-**[⬅️ 이전: Test Transaction Management](./05-test-transaction-management.md)**
+**[⬅️ 이전: Test Transaction Management](./05-test-transaction-management.md)** | **[홈으로 🏠](../README.md)**
 
 </div>
