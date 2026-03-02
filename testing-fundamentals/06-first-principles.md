@@ -423,6 +423,6 @@ void 할인_계산_두번째() {
 
 <div align="center">
 
-**[⬅️ 이전: Coverage Myths](./05-coverage-myths.md)**
+**[⬅️ 이전: Coverage Myths](./05-coverage-myths.md)** | **[홈으로 🏠](../README.md)**
 
 </div>

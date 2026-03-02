@@ -304,6 +304,6 @@ public List<Order> findByUserId(Long userId) {
 
 <div align="center">
 
-**[⬅️ 이전: Verify Wisely](./06-verify-wisely.md)**
+**[⬅️ 이전: Verify Wisely](./06-verify-wisely.md)** | **[홈으로 🏠](../README.md)**
 
 </div>

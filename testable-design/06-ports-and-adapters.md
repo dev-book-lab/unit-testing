@@ -408,6 +408,6 @@ public class NotificationService {
 
 <div align="center">
 
-**[⬅️ 이전: Pure Functions First](./05-pure-functions-first.md)**
+**[⬅️ 이전: Pure Functions First](./05-pure-functions-first.md)** | **[홈으로 🏠](../README.md)**
 
 </div>

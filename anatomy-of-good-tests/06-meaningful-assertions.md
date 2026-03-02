@@ -318,6 +318,6 @@ assertThatThrownBy(() -> orderService.place(emptyCart, user))
 
 <div align="center">
 
-**[⬅️ 이전: Fixtures & SetUp](./05-fixtures-and-setup.md)**
+**[⬅️ 이전: Fixtures & SetUp](./05-fixtures-and-setup.md)** | **[홈으로 🏠](../README.md)**
 
 </div>
