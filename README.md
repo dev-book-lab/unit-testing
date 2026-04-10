@@ -310,6 +310,6 @@ Made with ❤️ by [Dev Book Lab](https://github.com/dev-book-lab)
 
 <br/>
 
-*"테스트를 작성하는 것과, 올바른 테스트를 작성하는 것은 다르다"*
+**"테스트를 작성하는 것과, 올바른 테스트를 작성하는 것은 다르다"**
 
 </div>
